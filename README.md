@@ -64,7 +64,7 @@ Methods:
 
 Events:
 
-- `ready`
+- `ready` (`deviceName`)
 - `connection` (`deviceId`)
 - `disconnection` (`deviceId`)
 - `data` (`deviceId`, `data`)

@@ -156,7 +156,7 @@ static async Task RunAsync(string SERVICE_UUID, string CHAR_UUID)
         IsConnectable  = true,
     });
 
-    Emit(new { @event = "ready" });
+    Emit(new { @event = "ready", deviceName = Environment.MachineName });
 
     // -- Listen for stop command on stdin --
     _ = Task.Run(async () =>

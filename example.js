@@ -9,9 +9,9 @@ if (!check.success) {
 console.log('BLE supported:', check.reason);
 
 // 2. Register event handlers
-ble.on('ready',        ()             => console.log('Advertising - waiting for connection...'));
-ble.on('connection',   ({ deviceId }) => console.log('Connected:   ', deviceId));
-ble.on('disconnection',({ deviceId }) => console.log('Disconnected:', deviceId));
+ble.on('ready',        ({   deviceName   }) => console.log(`Advertising as ${deviceName} - waiting for connection...`));
+ble.on('connection',   ({    deviceId    }) => console.log('Connected:   ', deviceId));
+ble.on('disconnection',({    deviceId    }) => console.log('Disconnected:', deviceId));
 ble.on('data',         ({ deviceId, data }) => {
   console.log(`[${deviceId.slice(-5)}] ${data}`);
   // plug this into your game input handler here
