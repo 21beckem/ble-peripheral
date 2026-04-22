@@ -63,6 +63,31 @@ class BleController extends EventEmitter {
       '--char',    charUuid
     ], { stdio: ['pipe', 'pipe', 'pipe'] });
 
+    const shutdownChild = () => {
+      if (!this.#proc) return;
+      try {
+      this.#proc.stdin.write(JSON.stringify({ cmd: 'stop' }) + '\n');
+      } catch {}
+      try {
+      this.#proc.kill();
+      } catch {}
+    };
+
+    const onSigInt = () => { console.log('Received SIGINT'); shutdownChild(); process.exit(0); };
+    const onSigTerm = () => { console.log('Received SIGTERM'); shutdownChild(); process.exit(0); };
+    const onExit = () => { console.log('Received exit'); shutdownChild(); };
+
+    process.once('SIGINT', onSigInt);
+    process.once('SIGTERM', onSigTerm);
+    process.once('exit', onExit);
+
+    this.#proc.once('close', () => {
+      console.log('BlePeripheral.exe process closed');
+      process.off('SIGINT', onSigInt);
+      process.off('SIGTERM', onSigTerm);
+      process.off('exit', onExit);
+    });
+
     this.#proc.stdout.on('data', chunk => {
       this.#buf += chunk.toString();
       const lines = this.#buf.split('\n');
