@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>BLE Controller PoC</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0a0a0f; --surface: #13131a; --border: #2a2a3a;
+    --accent: #4f8ef7; --accent-dim: #1e3460;
+    --green: #3dffa0; --red: #ff4f6a; --text: #e8e8f0; --muted: #6b6b80;
+  }
+  body {
+    background: var(--bg); color: var(--text); font-family: 'Courier New', monospace;
+    min-height: 100dvh; display: flex; flex-direction: column;
+    align-items: center; padding: 24px 16px; gap: 20px;
+  }
+  h1 { font-size: 13px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+  #status {
+    font-size: 12px; letter-spacing: 0.1em; padding: 5px 12px; border-radius: 20px;
+    display: inline-block; border: 1px solid var(--border); background: var(--surface);
+    color: var(--muted); transition: all 0.3s;
+  }
+  #status.connected { border-color: var(--green); color: var(--green); background: rgba(61,255,160,0.05); }
+  #status.error     { border-color: var(--red);   color: var(--red);   background: rgba(255,79,106,0.05); }
+  #connect-btn {
+    width: 100%; max-width: 320px; padding: 16px; font-family: inherit;
+    font-size: 13px; letter-spacing: 0.15em; text-transform: uppercase;
+    color: var(--accent); background: var(--accent-dim); border: 1px solid var(--accent);
+    border-radius: 8px; cursor: pointer; transition: all 0.2s;
+  }
+  #connect-btn:active  { opacity: 0.7; transform: scale(0.98); }
+  #connect-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; max-width: 320px; }
+  .btn {
+    padding: 0; aspect-ratio: 1; font-family: inherit; font-weight: bold;
+    border-radius: 12px; border: 2px solid var(--border); background: var(--surface);
+    color: var(--muted); cursor: pointer; display: flex; align-items: center;
+    justify-content: center; flex-direction: column; gap: 4px; transition: all 0.1s;
+    -webkit-tap-highlight-color: transparent; user-select: none;
+  }
+  .btn .label { font-size: 22px; }
+  .btn .name  { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; }
+  .btn.enabled { border-color: var(--accent); color: var(--text); }
+  .btn.enabled:active { background: var(--accent-dim); transform: scale(0.94); }
+  .btn:disabled { opacity: 0.25; cursor: not-allowed; }
+  #log-wrap { width: 100%; max-width: 320px; flex: 1; }
+  #log-label { font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+  #log {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; font-size: 11px; line-height: 1.7; color: var(--muted);
+    height: 120px; overflow-y: auto;
+  }
+  .log-ok  { color: var(--green); }
+  .log-err { color: var(--red); }
+</style>
+</head>
+<body>
+<header>
+  <h1>BLE Controller — Proof of Concept</h1>
+  <div id="status">DISCONNECTED</div>
+</header>
+
+<button id="connect-btn">Connect to PC</button>
+
+<div class="controls">
+  <button class="btn" data-val="UP"    disabled><span class="label">↑</span><span class="name">Up</span></button>
+  <button class="btn" data-val="DOWN"  disabled><span class="label">↓</span><span class="name">Down</span></button>
+  <button class="btn" data-val="LEFT"  disabled><span class="label">←</span><span class="name">Left</span></button>
+  <button class="btn" data-val="RIGHT" disabled><span class="label">→</span><span class="name">Right</span></button>
+  <button class="btn" data-val="A"     disabled><span class="label">A</span><span class="name">Action A</span></button>
+  <button class="btn" data-val="B"     disabled><span class="label">B</span><span class="name">Action B</span></button>
+</div>
+
+<div id="log-wrap">
+  <div id="log-label">Event Log</div>
+  <div id="log"><span class="log-ok">Waiting for connection...</span></div>
+</div>
+
+<script>
+  const SERVICE_UUID = "a07498ca-ad5b-474e-940d-16f1fbe7e8cd";
+  const CHAR_UUID    = "51ff12bb-3ed8-46e5-b4f9-d64e2fec021b";
+
+  const statusEl    = document.getElementById("status");
+  const connectBtn  = document.getElementById("connect-btn");
+  const logEl       = document.getElementById("log");
+  const controlBtns = document.querySelectorAll(".btn");
+  let characteristic = null;
+
+  function log(msg, err = false) {
+    const el = document.createElement("div");
+    el.textContent = `${new Date().toLocaleTimeString()} — ${msg}`;
+    el.className = err ? "log-err" : "log-ok";
+    logEl.appendChild(el);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function setConnected(name) {
+    statusEl.textContent = `CONNECTED: ${name}`;
+    statusEl.className = "connected";
+    connectBtn.disabled = true;
+    controlBtns.forEach(b => { b.disabled = false; b.classList.add("enabled"); });
+    log(`Connected to ${name}`);
+  }
+
+  function setDisconnected() {
+    statusEl.textContent = "DISCONNECTED";
+    statusEl.className = "";
+    connectBtn.disabled = false;
+    characteristic = null;
+    controlBtns.forEach(b => { b.disabled = true; b.classList.remove("enabled"); });
+  }
+
+  connectBtn.addEventListener("click", async () => {
+    if (!navigator.bluetooth) {
+      log("Web Bluetooth not supported in this browser.", true);
+      return;
+    }
+    try {
+      log("Scanning...");
+      const device = await navigator.bluetooth.requestDevice({
+        filters: [{ services: [SERVICE_UUID] }]
+      });
+      device.addEventListener("gattserverdisconnected", () => {
+        log("Disconnected.", true);
+        setDisconnected();
+      });
+      log("Connecting...");
+      const server  = await device.gatt.connect();
+      const service = await server.getPrimaryService(SERVICE_UUID);
+      characteristic = await service.getCharacteristic(CHAR_UUID);
+      setConnected(device.name || device.id);
+    } catch (err) {
+      log(`Error: ${err.message}`, true);
+      statusEl.className = "error";
+      statusEl.textContent = "ERROR";
+    }
+  });
+
+  controlBtns.forEach(btn => {
+    btn.addEventListener("pointerdown", async (e) => {
+      e.preventDefault();
+      if (!characteristic) return;
+      try {
+        await characteristic.writeValueWithoutResponse(
+          new TextEncoder().encode(btn.dataset.val)
+        );
+        log(`Sent: ${btn.dataset.val}`);
+      } catch (err) {
+        log(`Send failed: ${err.message}`, true);
+      }
+    });
+  });
+</script>
+</body>
+</html>
